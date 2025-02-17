@@ -1,86 +1,94 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <unistd.h> 
 
-struct Frame {
-    int seq;
-    char data;
+struct frame {
+    int info; 
+    int seq;   
 };
 
-#define TIMEOUT 3
-#define MAX_SEQ 4
-#define NUM_FRAMES 5
+int ak;  
+int t = 5;  
+int disconnect = 0;  
+struct frame p; 
+char turn = 's';
+int errorframe = 1;  
+int errorack = 1;  
 
-int sender_turn = 1;
-int frame_to_send = 0;
-int expected_ack = 0;
-int timeout_counter = 0;
-
-int simulate_error();
-void sender(struct Frame frame);
-void receiver(struct Frame frame);
+void sender();
+void receiver();
 
 int main() {
-    srand(time(NULL));
+    p.info = 0; 
+    p.seq = 0;   
 
-    struct Frame current_frame;
-    current_frame.data = 'A';
-
-    while (frame_to_send < NUM_FRAMES) {
-        if (sender_turn) {
-            sender(current_frame);
-        } else {
-            receiver(current_frame);
-        }
+    while (!disconnect) {
+        sender();  
+        usleep(500000);
+        receiver();
     }
-
-    printf("Communication complete.\n");
     return 0;
 }
 
-int simulate_error() {
-    return (rand() % 5 == 0);
-}
-
-void sender(struct Frame frame) {
-    if (timeout_counter >= TIMEOUT) {
-        printf("SENDER: Timeout occurred! Resending frame %d\n", expected_ack);
-        timeout_counter = 0;
-    } else {
-        if(frame_to_send == expected_ack) {
-            frame.seq = frame_to_send;
-            printf("SENDER: Sending frame %d with data '%c'\n", frame.seq, frame.data + frame.seq);
-
-            if (simulate_error()) {
-                printf("SENDER: Error sending frame %d!\n", frame.seq);
-            } else {
-                sender_turn = 0;
-                timeout_counter++;
+void sender() {
+    static int flag = 0;
+    if (turn == 's') {  
+        if (errorack == 0) {
+            printf("SENDER: Sent packet with seq NO: %d\n", p.seq);
+            errorframe = rand() % 4;  
+            printf("%s\n", (errorframe == 0 ? "Error While sending Packet" : ""));
+            turn = 'r';  
+        } else {
+            if (flag == 1) {
+                printf("SENDER: Received ACK for packet %d\n", ak);
             }
-        } else {
-            printf("SENDER: Waiting for ACK %d, current ACK = %d.\n", expected_ack, frame_to_send);
-            timeout_counter++;
-        }
-    }
-}
 
-void receiver(struct Frame frame) {
-    if (simulate_error()) {
-        printf("RECEIVER: Error receiving frame! ACK %d not sent.\n", frame.seq);
-        sender_turn = 1;
-        timeout_counter++;
+            if (p.seq == 5) {
+                disconnect = 1;  
+                return;
+            }
+
+            p.info = p.info + 1;
+            p.seq = p.seq + 1;
+            printf("SENDER: Sent packet with seq NO: %d\n", p.seq);
+            errorframe = rand() % 4;  
+            printf("%s\n", (errorframe == 0 ? "Error While sending Packet" : ""));
+            turn = 'r'; 
+
+            flag = 1; 
+        }
     } else {
-        if (frame.seq == expected_ack) {
-            printf("RECEIVER: Received frame %d with data '%c' successfully.\n", frame.seq, frame.data + frame.seq);
-            expected_ack++;
-            frame_to_send = expected_ack;
-            sender_turn = 1;
-            timeout_counter = 0;
-        } else {
-            printf("RECEIVER: Received duplicate or out-of-order frame %d (expecting %d). Sending ACK for %d again.\n", frame.seq, expected_ack, expected_ack-1);
-            sender_turn = 1;
-            timeout_counter = 0;
+        t--;  
+        printf("SENDER: Time reducing\n");
+
+        if (t == 0) {  
+            turn = 's';  
+            errorack = 0; 
+            t = 5;  
         }
     }
 }
 
+void receiver() {
+    static int frexp = 1;  
+    if (turn == 'r') {  
+        if (errorframe != 0) {  
+            if (p.seq == frexp) {  
+                printf("RECEIVER: Received packet with seq %d\n", p.seq);
+
+                ak = p.seq;  
+                frexp = frexp + 1;  
+
+                turn = 's';  
+                errorack = rand() % 4;  
+                printf("%s\n", (errorack == 0 ? "Error While sending ACK" : ""));
+            } else {
+                printf("RECEIVER: Duplicated packet with seq %d\n", frexp - 1);
+                ak = frexp - 1;  
+                turn = 's'; 
+                errorack = rand() % 4; 
+                printf("%s\n", (errorack == 0 ? "Error While sending ACK" : ""));
+            }
+        }
+    }
+}
