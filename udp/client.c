@@ -1,42 +1,50 @@
 #include <stdio.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
-#define PORT 4000
+#define PORT 8080
+#define MAX 80
 
 int main() {
-    int m, n = 100, sockfd, addr = sizeof(struct sockaddr_in);
-    char buf[1025];
-    struct sockaddr_in y;
+    int sockfd;
+    char buff[MAX];
+    struct sockaddr_in servaddr;
+    socklen_t len;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        perror("Socket creation failed");
+        exit(1);
+    }
 
-    y.sin_family = AF_INET;
-    y.sin_port = htons(PORT);
-    y.sin_addr.s_addr = htonl(INADDR_ANY);
+    memset(&servaddr, 0, sizeof(servaddr));
 
-    printf("connecting....\n");
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(PORT);
+    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    printf("Connected to server (UDP)...\n");
 
     while (1) {
-        printf("msg to be send : ");
-        scanf("%s", buf);
+        memset(buff, 0, MAX);
+        printf("Client: ");
+        int n = 0;
+        while ((buff[n++] = getchar()) != '\n');
 
-        sendto(sockfd, buf, n, 0, (struct sockaddr*)&y, addr);
+        sendto(sockfd, buff, strlen(buff), 0, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
-        if (strcmp(buf, "quit") == 0)
+        memset(buff, 0, MAX);
+        len = sizeof(servaddr);
+        recvfrom(sockfd, buff, MAX, 0, (struct sockaddr *)&servaddr, &len);
+        printf("Server: %s", buff);
+
+        if (strncmp(buff, "exit", 4) == 0) {
+            printf("Client exiting...\n");
             break;
-
-        printf("msg send \n waiting for the response\n");
-
-        n = recvfrom(sockfd, buf, 1024, 0, (struct sockaddr*)&y, &addr);
-        buf[n] = '\0';
-
-        if (n > 1)
-            printf("\n received : %s \n", buf);
+        }
     }
 
     close(sockfd);
