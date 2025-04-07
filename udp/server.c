@@ -1,41 +1,56 @@
 #include <stdio.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <netinet/in.h>
 
-#define PORT 4000
+#define PORT 8080
+#define MAX 80
 
 int main() {
-    int n, sockfd, addr = sizeof(struct sockaddr_in);
-    char buf[1024];
-    struct sockaddr_in x;
+    int sockfd;
+    char buff[MAX];
+    struct sockaddr_in servaddr, cliaddr;
+    socklen_t len;
 
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-        printf("error in creating socket \n");
-    else
-        printf("socket successfully created\n");
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        perror("Socket creation failed");
+        exit(1);
+    }
 
-    x.sin_family = AF_INET;
-    x.sin_port = htons(PORT);
-    x.sin_addr.s_addr = htonl(INADDR_ANY);
+    memset(&servaddr, 0, sizeof(servaddr));
+    memset(&cliaddr, 0, sizeof(cliaddr));
 
-    bind(sockfd, (struct sockaddr*)&x, sizeof(x));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = INADDR_ANY;
+    servaddr.sin_port = htons(PORT);
 
-    printf("waiting...\n");
+    if (bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+        perror("Bind failed");
+        exit(1);
+    }
 
-    do {
-        n = recvfrom(sockfd, buf, 1024, 0, (struct sockaddr*)&x, &addr);
-        buf[n] = '\0';
+    printf("UDP Server listening on port %d...\n", PORT);
 
-        if (n > 1)
-            printf("received : %s \n", buf);
+    while (1) {
+        memset(buff, 0, MAX);
+        len = sizeof(cliaddr);
+        recvfrom(sockfd, buff, MAX, 0, (struct sockaddr *)&cliaddr, &len);
+        printf("Client: %s", buff);
 
-        scanf("%s", buf);
-        sendto(sockfd, buf, n, 0, (struct sockaddr*)&x, addr);
-    } while (strcmp(buf, "quit") != 0);
+        if (strncmp(buff, "exit", 4) == 0) {
+            printf("Server exiting...\n");
+            break;
+        }
+
+        printf("Server: ");
+        memset(buff, 0, MAX);
+        int n = 0;
+        while ((buff[n++] = getchar()) != '\n');
+
+        sendto(sockfd, buff, strlen(buff), 0, (struct sockaddr *)&cliaddr, len);
+    }
 
     close(sockfd);
     return 0;
